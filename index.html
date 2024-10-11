@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Pastebin</title>
+<script src="qrcode.js"></script>
+<script src="lzma.js"></script>
+<script>
+var matches;
+var lzma = new LZMA("lzma_worker.js");
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById("input").focus();
+
+  if (matches = /(?:^|\;)invert\=([01])(?:\;|$)/.exec(document.cookie)) {
+    if (matches[1] === '1') {
+      document.body.classList.add("invert");
+    }
+  }
+
+  var base64 = location.hash.substr(1);
+  if (base64.length == 0) return;
+
+  if (!fetch) {
+    alert("Your browser does not support this page.  Sorry! :(");
+    return;
+  }
+
+  fetch("data:application/octet-stream;base64,"+base64).then(r => r.blob()).then(function(blob){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var compressed_data = Array.from(new Uint8Array(reader.result));
+      lzma.decompress(compressed_data, function(plaintext, error){
+        if (error) {
+          alert("Failed to decompress data: "+error);
+          return;
+        }
+
+        document.getElementById("input").value = plaintext;
+      });
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+});
+
+function url_generate(format) {
+  var plaintext = document.getElementById("input").value;
+  lzma.compress(plaintext, 1, function(compressed, error){
+    if (error) {
+      alert("Failed to compress data: "+error);
+      return;
+    }
+
+    var reader = new FileReader();
+    reader.onload = function(){
+      var base64 = reader.result.substr(reader.result.indexOf(",")+1);
+      var url = "https://"+location.host+location.pathname+"#"+base64;
+      document.getElementById("output").innerHTML= '<p><a href="' + url + '">' + url + '</a></p>';
+      document.getElementById("qrcode").innerHTML = "";
+      new QRCode(document.getElementById("qrcode"), url);
+    };
+    reader.readAsDataURL(new Blob([new Uint8Array(compressed)]));
+  });
+}
+</script>
+</head>
+<body>
+<h1>QR Pastebin</h1>
+<p><textarea cols="80" rows="10" id="input"></textarea></p>
+<p><button onclick="url_generate('raw')">Generate QR Code</button></p>
+<div id="qrcode"></div>
+<div id="output"></div>
+</body>
+</html>
